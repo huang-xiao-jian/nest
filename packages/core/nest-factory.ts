@@ -83,7 +83,6 @@ export class NestFactoryStatic {
       container,
       metadataScanner,
       graphInspector,
-      config,
     );
 
     await ExceptionsZone.asyncRun(async () => {

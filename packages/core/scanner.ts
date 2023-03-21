@@ -29,8 +29,6 @@ import {
   isNil,
   isUndefined,
 } from '@nestjs/common/utils/shared.utils';
-import { iterate } from 'iterare';
-import { ApplicationConfig } from './application-config';
 import { CircularDependencyException } from './errors/exceptions/circular-dependency.exception';
 import { InvalidClassModuleException } from './errors/exceptions/invalid-class-module.exception';
 import { InvalidModuleException } from './errors/exceptions/invalid-module.exception';
@@ -50,14 +48,10 @@ interface ApplicationProviderWrapper {
 }
 
 export class DependenciesScanner {
-  private readonly applicationProvidersApplyMap: ApplicationProviderWrapper[] =
-    [];
-
   constructor(
     private readonly container: NestContainer,
     private readonly metadataScanner: MetadataScanner,
     private readonly graphInspector: GraphInspector,
-    private readonly applicationConfig = new ApplicationConfig(),
   ) {}
 
   /**
@@ -78,9 +72,13 @@ export class DependenciesScanner {
      *   2. 采集模块内部物料信息
      */
     await this.scanModulesForDependencies();
-
+    /**
+     * 分配模块距离，主要影响 `hooks` 调用顺序
+     */
     this.calculateModulesDistance();
-    this.addScopedEnhancersMetadata();
+    /**
+     * 框架行为，所有模块隐式依赖全局模块
+     */
     this.container.bindGlobalScope();
   }
 
@@ -574,34 +572,11 @@ export class DependenciesScanner {
       this.container.getModuleCompiler(),
       this.graphInspector,
     );
+    /**
+     * 核心模块无依赖模块，否则不能这么调用
+     */
     const [instance] = await this.scanForModules(moduleDefinition);
     this.container.registerCoreModuleRef(instance);
-  }
-
-  /**
-   * Add either request or transient globally scoped enhancers
-   * to all controllers metadata storage
-   */
-  public addScopedEnhancersMetadata() {
-    iterate(this.applicationProvidersApplyMap)
-      .filter(wrapper => this.isRequestOrTransient(wrapper.scope))
-      .forEach(({ moduleKey, providerKey }) => {
-        const modulesContainer = this.container.getModules();
-        const { injectables } = modulesContainer.get(moduleKey);
-        const instanceWrapper = injectables.get(providerKey);
-
-        const iterableIterator = modulesContainer.values();
-        iterate(iterableIterator)
-          .map(moduleRef =>
-            Array.from<InstanceWrapper>(moduleRef.controllers.values()).concat(
-              moduleRef.entryProviders,
-            ),
-          )
-          .flatten()
-          .forEach(controllerOrEntryProvider =>
-            controllerOrEntryProvider.addEnhancerMetadata(instanceWrapper),
-          );
-      });
   }
 
   public isDynamicModule(
