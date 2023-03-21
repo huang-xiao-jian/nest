@@ -13,15 +13,12 @@ import {
   ROUTE_ARGS_METADATA,
 } from '@nestjs/common/constants';
 import {
-  CanActivate,
   ClassProvider,
   Controller,
-  ExceptionFilter,
   ExistingProvider,
   FactoryProvider,
   Injectable,
   InjectionToken,
-  NestInterceptor,
   PipeTransform,
   Scope,
   Type,
@@ -34,24 +31,15 @@ import {
 } from '@nestjs/common/utils/shared.utils';
 import { iterate } from 'iterare';
 import { ApplicationConfig } from './application-config';
-import {
-  APP_FILTER,
-  APP_GUARD,
-  APP_INTERCEPTOR,
-  APP_PIPE,
-  ENHANCER_TOKEN_TO_SUBTYPE_MAP,
-} from './constants';
 import { CircularDependencyException } from './errors/exceptions/circular-dependency.exception';
 import { InvalidClassModuleException } from './errors/exceptions/invalid-class-module.exception';
 import { InvalidModuleException } from './errors/exceptions/invalid-module.exception';
 import { UndefinedModuleException } from './errors/exceptions/undefined-module.exception';
-import { getClassScope } from './helpers/get-class-scope';
 import { NestContainer } from './injector/container';
 import { InstanceWrapper } from './injector/instance-wrapper';
 import { InternalCoreModuleFactory } from './injector/internal-core-module/internal-core-module-factory';
 import { Module } from './injector/module';
 import { GraphInspector } from './inspector/graph-inspector';
-import { UuidFactory } from './inspector/uuid-factory';
 import { MetadataScanner } from './metadata-scanner';
 
 interface ApplicationProviderWrapper {
@@ -72,35 +60,75 @@ export class DependenciesScanner {
     private readonly applicationConfig = new ApplicationConfig(),
   ) {}
 
+  /**
+   * 调用时机：初始化阶段调用
+   */
   public async scan(module: Type<any>) {
+    /**
+     * 注册框架内建模块
+     */
     await this.registerCoreModule();
+    /**
+     * 深度优先扫描模块，构造模块集合
+     */
     await this.scanForModules(module);
+    /**
+     * 复合职能：
+     *   1. 构建模块依赖关系
+     *   2. 采集模块内部物料信息
+     */
     await this.scanModulesForDependencies();
-    this.calculateModulesDistance();
 
+    this.calculateModulesDistance();
     this.addScopedEnhancersMetadata();
     this.container.bindGlobalScope();
   }
 
+  /**
+   * 深度优先递归扫描模块依赖树，返回模块实例集合
+   */
   public async scanForModules(
     moduleDefinition:
       | ForwardReference
       | Type<unknown>
       | DynamicModule
       | Promise<DynamicModule>,
+    /**
+     * 模块遍历路径
+     */
     scope: Type<unknown>[] = [],
     ctxRegistry: (ForwardReference | DynamicModule | Type<unknown>)[] = [],
   ): Promise<Module[]> {
+    /**
+     * 复合职能：
+     *   1. 实例化 module；
+     *   2. 将 module 加入全局容器 NestContainer 之中；
+     */
     const moduleInstance = await this.insertModule(moduleDefinition, scope);
+
+    /**
+     * 处理异步模块定义
+     */
     moduleDefinition =
       moduleDefinition instanceof Promise
         ? await moduleDefinition
         : moduleDefinition;
+
+    /**
+     * 递归扫描过程中，共享已扫描模块集合
+     */
     ctxRegistry.push(moduleDefinition);
 
+    /**
+     * 处理 forwardRef 模块定义
+     */
     if (this.isForwardReference(moduleDefinition)) {
       moduleDefinition = (moduleDefinition as ForwardReference).forwardRef();
     }
+
+    /**
+     * 合并模块动态定义与静态定义，注意唯一标识分配问题
+     */
     const modules = !this.isDynamicModule(
       moduleDefinition as Type<any> | DynamicModule,
     )
@@ -116,6 +144,9 @@ export class DependenciesScanner {
           ...((moduleDefinition as DynamicModule).imports || []),
         ];
 
+    /* ==================================================== */
+    /* =========== 扫描依赖模块的模块依赖树开始 ========== */
+    /* ==================================================== */
     let registeredModuleRefs = [];
     for (const [index, innerModule] of modules.entries()) {
       // In case of a circular dependency (ES module system), JavaScript will resolve the type to `undefined`.
@@ -128,16 +159,31 @@ export class DependenciesScanner {
       if (ctxRegistry.includes(innerModule)) {
         continue;
       }
+      /**
+       * 获取依赖模块为根节点的模块集合
+       */
       const moduleRefs = await this.scanForModules(
         innerModule,
         [].concat(scope, moduleDefinition),
         ctxRegistry,
       );
+
+      /**
+       * 向上合并模块依赖树
+       */
       registeredModuleRefs = registeredModuleRefs.concat(moduleRefs);
     }
+    /* ==================================================== */
+    /* =========== 扫描依赖模块的模块依赖树结束 ========== */
+    /* ==================================================== */
+
+    /**
+     * TODO - 何种场景下，模块本身不进行实例化
+     */
     if (!moduleInstance) {
       return registeredModuleRefs;
     }
+
     return [moduleInstance].concat(registeredModuleRefs);
   }
 
@@ -164,18 +210,28 @@ export class DependenciesScanner {
     modules: Map<string, Module> = this.container.getModules(),
   ) {
     for (const [token, { metatype }] of modules) {
+      // 构建 Module --> Module.imports 依赖关系
       await this.reflectImports(metatype, token, metatype.name);
+
+      // 模块内部信息扫描
       this.reflectProviders(metatype, token);
-      this.reflectControllers(metatype, token);
       this.reflectExports(metatype, token);
+      // 控制器概念暂时忽视
+      // this.reflectControllers(metatype, token);
     }
   }
 
+  /**
+   * 构建 Module --> Module.imports 依赖关系
+   */
   public async reflectImports(
     module: Type<unknown>,
     token: string,
     context: string,
   ) {
+    /**
+     * 元信息合并
+     */
     const modules = [
       ...this.reflectMetadata(MODULE_METADATA.IMPORTS, module),
       ...this.container.getDynamicMetadataByToken(
@@ -188,7 +244,15 @@ export class DependenciesScanner {
     }
   }
 
+  /**
+   *
+   * @param module - 模块定义
+   * @param token - 模块唯一标识
+   */
   public reflectProviders(module: Type<any>, token: string) {
+    /**
+     * 合并模块动态元信息 + 静态元信息
+     */
     const providers = [
       ...this.reflectMetadata(MODULE_METADATA.PROVIDERS, module),
       ...this.container.getDynamicMetadataByToken(
@@ -197,7 +261,14 @@ export class DependenciesScanner {
       ),
     ];
     providers.forEach(provider => {
+      // 粗略理解为常规 Provider 入库管理
       this.insertProvider(provider, token);
+      /**
+       * 反射 Provider 扩展元信息
+       * 例如：Controller `@UsePipes` | `@UseInterceptors`
+       *
+       * 特别注意，扩展元信息可作用与 Class | Class Method / Property 级别
+       */
       this.reflectDynamicMetadata(provider, token);
     });
   }
@@ -216,6 +287,13 @@ export class DependenciesScanner {
     });
   }
 
+  /**
+   *
+   * @param cls - 仅针对 Class 实例扩展元信息
+   * @param token - 宿主 Module 唯一标识
+   * @returns
+   *
+   */
   public reflectDynamicMetadata(cls: Type<Injectable>, token: string) {
     if (!cls || !cls.prototype) {
       return;
@@ -227,7 +305,15 @@ export class DependenciesScanner {
     this.reflectParamInjectables(cls, token, ROUTE_ARGS_METADATA);
   }
 
+  /**
+   *
+   * @param module - 模块定义
+   * @param token - 模块唯一标识
+   */
   public reflectExports(module: Type<unknown>, token: string) {
+    /**
+     * 合并模块动态元信息 + 静态元信息
+     */
     const exports = [
       ...this.reflectMetadata(MODULE_METADATA.EXPORTS, module),
       ...this.container.getDynamicMetadataByToken(
@@ -375,6 +461,13 @@ export class DependenciesScanner {
     calculateDistance(rootModule);
   }
 
+  /**
+   *
+   * @param related - 依赖模块，Module.imports 裸声明
+   * @param token - 原始模块标识
+   * @param context
+   *
+   */
   public async insertImport(related: any, token: string, context: string) {
     if (isUndefined(related)) {
       throw new CircularDependencyException(context);
@@ -397,57 +490,23 @@ export class DependenciesScanner {
 
   public insertProvider(provider: Provider, token: string) {
     const isCustomProvider = this.isCustomProvider(provider);
+    /**
+     * Module.providers 直接使用 Class 声明
+     */
     if (!isCustomProvider) {
       return this.container.addProvider(provider as Type<any>, token);
     }
-    const applyProvidersMap = this.getApplyProvidersMap();
-    const providersKeys = Object.keys(applyProvidersMap);
-    const type = (
-      provider as
-        | ClassProvider
-        | ValueProvider
-        | FactoryProvider
-        | ExistingProvider
-    ).provide;
 
-    if (!providersKeys.includes(type as string)) {
-      return this.container.addProvider(provider as any, token);
-    }
-    const uuid = UuidFactory.get(type.toString());
-    const providerToken = `${type as string} (UUID: ${uuid})`;
-
-    let scope = (provider as ClassProvider | FactoryProvider).scope;
-    if (isNil(scope) && (provider as ClassProvider).useClass) {
-      scope = getClassScope((provider as ClassProvider).useClass);
-    }
-    this.applicationProvidersApplyMap.push({
-      type,
-      moduleKey: token,
-      providerKey: providerToken,
-      scope,
-    });
-
-    const newProvider = {
-      ...provider,
-      provide: providerToken,
-      scope,
-    } as Provider;
-
-    const enhancerSubtype =
-      ENHANCER_TOKEN_TO_SUBTYPE_MAP[
-        type as
-          | typeof APP_GUARD
-          | typeof APP_PIPE
-          | typeof APP_FILTER
-          | typeof APP_INTERCEPTOR
-      ];
-    const factoryOrClassProvider = newProvider as
-      | FactoryProvider
-      | ClassProvider;
-    if (this.isRequestOrTransient(factoryOrClassProvider.scope)) {
-      return this.container.addInjectable(newProvider, token, enhancerSubtype);
-    }
-    this.container.addProvider(newProvider, token, enhancerSubtype);
+    /**
+     * 非全局 Interceptor / Pipe / Guard / Filter 走默认模式即可
+     */
+    return this.container.addProvider(provider as any, token);
+    /**
+     * 全局 Interceptor / Pipe / Guard / Filter 仓储
+     */
+    /**
+     * 全局模块特殊处理，暂时不纳入考虑
+     */
   }
 
   public insertInjectable(
@@ -485,6 +544,11 @@ export class DependenciesScanner {
     }
   }
 
+  /**
+   *
+   * @param exportedProvider
+   * @param token - 模块唯一标识
+   */
   public insertExportedProvider(
     exportedProvider: Type<Injectable>,
     token: string,
@@ -508,7 +572,6 @@ export class DependenciesScanner {
       this.container,
       this,
       this.container.getModuleCompiler(),
-      this.container.getHttpAdapterHostRef(),
       this.graphInspector,
     );
     const [instance] = await this.scanForModules(moduleDefinition);
@@ -539,71 +602,6 @@ export class DependenciesScanner {
             controllerOrEntryProvider.addEnhancerMetadata(instanceWrapper),
           );
       });
-  }
-
-  public applyApplicationProviders() {
-    const applyProvidersMap = this.getApplyProvidersMap();
-    const applyRequestProvidersMap = this.getApplyRequestProvidersMap();
-
-    const getInstanceWrapper = (
-      moduleKey: string,
-      providerKey: string,
-      collectionKey: 'providers' | 'injectables',
-    ) => {
-      const modules = this.container.getModules();
-      const collection = modules.get(moduleKey)[collectionKey];
-      return collection.get(providerKey);
-    };
-
-    // Add global enhancers to the application config
-    this.applicationProvidersApplyMap.forEach(
-      ({ moduleKey, providerKey, type, scope }) => {
-        let instanceWrapper: InstanceWrapper;
-        if (this.isRequestOrTransient(scope)) {
-          instanceWrapper = getInstanceWrapper(
-            moduleKey,
-            providerKey,
-            'injectables',
-          );
-
-          this.graphInspector.insertAttachedEnhancer(instanceWrapper);
-          return applyRequestProvidersMap[type as string](instanceWrapper);
-        }
-        instanceWrapper = getInstanceWrapper(
-          moduleKey,
-          providerKey,
-          'providers',
-        );
-        this.graphInspector.insertAttachedEnhancer(instanceWrapper);
-        applyProvidersMap[type as string](instanceWrapper.instance);
-      },
-    );
-  }
-
-  public getApplyProvidersMap(): { [type: string]: Function } {
-    return {
-      [APP_INTERCEPTOR]: (interceptor: NestInterceptor) =>
-        this.applicationConfig.addGlobalInterceptor(interceptor),
-      [APP_PIPE]: (pipe: PipeTransform) =>
-        this.applicationConfig.addGlobalPipe(pipe),
-      [APP_GUARD]: (guard: CanActivate) =>
-        this.applicationConfig.addGlobalGuard(guard),
-      [APP_FILTER]: (filter: ExceptionFilter) =>
-        this.applicationConfig.addGlobalFilter(filter),
-    };
-  }
-
-  public getApplyRequestProvidersMap(): { [type: string]: Function } {
-    return {
-      [APP_INTERCEPTOR]: (interceptor: InstanceWrapper<NestInterceptor>) =>
-        this.applicationConfig.addGlobalRequestInterceptor(interceptor),
-      [APP_PIPE]: (pipe: InstanceWrapper<PipeTransform>) =>
-        this.applicationConfig.addGlobalRequestPipe(pipe),
-      [APP_GUARD]: (guard: InstanceWrapper<CanActivate>) =>
-        this.applicationConfig.addGlobalRequestGuard(guard),
-      [APP_FILTER]: (filter: InstanceWrapper<ExceptionFilter>) =>
-        this.applicationConfig.addGlobalRequestFilter(filter),
-    };
   }
 
   public isDynamicModule(

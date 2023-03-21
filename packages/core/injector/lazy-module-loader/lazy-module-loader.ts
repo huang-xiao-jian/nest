@@ -21,10 +21,7 @@ export class LazyModuleLoader {
       | Promise<Type<unknown> | DynamicModule>
       | Type<unknown>
       | DynamicModule,
-    loadOpts?: LazyModuleLoaderLoadOptions,
   ): Promise<ModuleRef> {
-    this.registerLoggerConfiguration(loadOpts);
-
     const moduleClassOrDynamicDefinition = await loaderFn();
     const moduleInstances = await this.dependenciesScanner.scanForModules(
       moduleClassOrDynamicDefinition,
@@ -48,12 +45,6 @@ export class LazyModuleLoader {
     );
     const [targetModule] = moduleInstances;
     return this.getTargetModuleRef(targetModule);
-  }
-
-  private registerLoggerConfiguration(loadOpts?: LazyModuleLoaderLoadOptions) {
-    if (loadOpts?.logger === false) {
-      this.instanceLoader.setLogger(new SilentLogger());
-    }
   }
 
   private createLazyModulesContainer(

@@ -279,9 +279,6 @@ export class NestApplication
         port,
         ...listenFnArgs,
         (...originalCallbackArgs: unknown[]) => {
-          if (this.appOptions?.autoFlushLogs ?? true) {
-            this.flushLogs();
-          }
           if (originalCallbackArgs[0] instanceof Error) {
             return reject(originalCallbackArgs[0]);
           }

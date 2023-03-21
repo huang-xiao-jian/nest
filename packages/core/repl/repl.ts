@@ -9,7 +9,6 @@ import { defineDefaultCommandsOnRepl } from './repl-native-commands';
 
 export async function repl(module: Type | DynamicModule) {
   const app = await NestFactory.createApplicationContext(module, {
-    abortOnError: false,
     logger: new ReplLogger(),
   });
   await app.init();

@@ -1,4 +1,4 @@
-import { HttpServer, INestApplicationContext } from '@nestjs/common';
+import { INestApplicationContext } from '@nestjs/common';
 import { NestApplicationContextOptions } from '@nestjs/common/interfaces/nest-application-context-options.interface';
 import { isFunction } from '@nestjs/common/utils/shared.utils';
 import { ApplicationConfig } from './application-config';
@@ -34,6 +34,10 @@ export class NestFactoryStatic {
     const graphInspector = this.createGraphInspector(options, container);
 
     const applicationConfig = undefined;
+
+    /**
+     * 核心职能：中央式资源调度 Container 网络
+     */
     await this.initialize(
       moduleCls,
       container,
@@ -49,6 +53,9 @@ export class NestFactoryStatic {
       new NestApplicationContext(container, options, root),
     );
 
+    /**
+     * 调用 Hooks 执行初始化操作
+     */
     return context.init();
   }
 
@@ -82,7 +89,6 @@ export class NestFactoryStatic {
     await ExceptionsZone.asyncRun(async () => {
       await dependenciesScanner.scan(module);
       await instanceLoader.createInstancesOfDependencies();
-      dependenciesScanner.applyApplicationProviders();
     });
   }
 
@@ -90,6 +96,7 @@ export class NestFactoryStatic {
     const proxy = this.createExceptionProxy();
     return new Proxy(target, {
       get: proxy,
+      // 事实上禁止覆盖
       set: proxy,
     });
   }
