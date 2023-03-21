@@ -22,6 +22,9 @@ export class ExceptionsZone {
     }
   }
 
+  /**
+   * TODO - 浏览器端如何处理异常
+   */
   public static async asyncRun(
     callback: () => Promise<void>,
     teardown: (err: any) => void = DEFAULT_TEARDOWN,

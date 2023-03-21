@@ -36,7 +36,6 @@ export {
   MiddlewareConsumer,
   ModuleMetadata,
   NestApplicationOptions,
-  NestHybridApplicationOptions,
   NestInterceptor,
   NestMiddleware,
   NestModule,

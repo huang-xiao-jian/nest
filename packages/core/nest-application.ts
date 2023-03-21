@@ -4,7 +4,6 @@ import {
   HttpServer,
   INestApplication,
   INestMicroservice,
-  NestHybridApplicationOptions,
   NestInterceptor,
   PipeTransform,
   VersioningOptions,
@@ -212,34 +211,6 @@ export class NestApplication
   public async registerRouterHooks() {
     this.routesResolver.registerNotFoundHandler();
     this.routesResolver.registerExceptionHandler();
-  }
-
-  public connectMicroservice<T extends object>(
-    microserviceOptions: T,
-    hybridAppOptions: NestHybridApplicationOptions = {},
-  ): INestMicroservice {
-    const { NestMicroservice } = loadPackage(
-      '@nestjs/microservices',
-      'NestFactory',
-      () => require('@nestjs/microservices'),
-    );
-    const { inheritAppConfig } = hybridAppOptions;
-    const applicationConfig = inheritAppConfig
-      ? this.config
-      : new ApplicationConfig();
-
-    const instance = new NestMicroservice(
-      this.container,
-      microserviceOptions,
-      this.graphInspector,
-      applicationConfig,
-    );
-    instance.registerListeners();
-    instance.setIsInitialized(true);
-    instance.setIsInitHookCalled(true);
-
-    this.microservices.push(instance);
-    return instance;
   }
 
   public getMicroservices(): INestMicroservice[] {

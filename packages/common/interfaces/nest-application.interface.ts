@@ -6,12 +6,7 @@ import { CanActivate } from './features/can-activate.interface';
 import { NestInterceptor } from './features/nest-interceptor.interface';
 import { GlobalPrefixOptions } from './global-prefix-options.interface';
 import { HttpServer } from './http/http-server.interface';
-import {
-  ExceptionFilter,
-  INestMicroservice,
-  NestHybridApplicationOptions,
-  PipeTransform,
-} from './index';
+import { ExceptionFilter, INestMicroservice, PipeTransform } from './index';
 import { INestApplicationContext } from './nest-application-context.interface';
 import { VersioningOptions } from './version-options.interface';
 import { WebSocketAdapter } from './websockets/web-socket-adapter.interface';
@@ -85,20 +80,6 @@ export interface INestApplication extends INestApplicationContext {
    * @returns {this}
    */
   useWebSocketAdapter(adapter: WebSocketAdapter): this;
-
-  /**
-   * Connects microservice to the NestApplication instance. Transforms application
-   * to a hybrid instance.
-   *
-   * @template {object} T
-   * @param {T} options Microservice options object
-   * @param {NestHybridApplicationOptions} hybridOptions Hybrid options object
-   * @returns {INestMicroservice}
-   */
-  connectMicroservice<T extends object = any>(
-    options: T,
-    hybridOptions?: NestHybridApplicationOptions,
-  ): INestMicroservice;
 
   /**
    * Returns array of the microservices connected to the NestApplication.
