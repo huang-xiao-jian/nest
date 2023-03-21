@@ -1,11 +1,7 @@
 import { HttpServer, INestApplicationContext } from '@nestjs/common';
 import { NestApplicationContextOptions } from '@nestjs/common/interfaces/nest-application-context-options.interface';
-import { NestApplicationOptions } from '@nestjs/common/interfaces/nest-application-options.interface';
-import { Logger } from '@nestjs/common/services/logger.service';
-import { isFunction, isNil } from '@nestjs/common/utils/shared.utils';
-import { AbstractHttpAdapter } from './adapters/http-adapter';
+import { isFunction } from '@nestjs/common/utils/shared.utils';
 import { ApplicationConfig } from './application-config';
-import { MESSAGES } from './constants';
 import { ExceptionsZone } from './errors/exceptions-zone';
 import { NestContainer } from './injector/container';
 import { Injector } from './injector/injector';
@@ -21,10 +17,6 @@ import { DependenciesScanner } from './scanner';
  * @publicApi
  */
 export class NestFactoryStatic {
-  private readonly logger = new Logger('NestFactory', {
-    timestamp: true,
-  });
-
   /**
    * Creates an instance of NestApplicationContext.
    *
@@ -70,11 +62,8 @@ export class NestFactoryStatic {
     graphInspector: GraphInspector,
     config = new ApplicationConfig(),
     options: NestApplicationContextOptions = {},
-    httpServer: HttpServer = null,
   ) {
-    UuidFactory.mode = options.snapshot
-      ? UuidFactoryMode.Deterministic
-      : UuidFactoryMode.Random;
+    UuidFactory.mode = UuidFactoryMode.Random;
 
     const injector = new Injector({ preview: options.preview });
     const instanceLoader = new InstanceLoader(
@@ -89,9 +78,7 @@ export class NestFactoryStatic {
       graphInspector,
       config,
     );
-    container.setHttpAdapter(httpServer);
 
-    await httpServer?.init();
     await ExceptionsZone.asyncRun(async () => {
       await dependenciesScanner.scan(module);
       await instanceLoader.createInstancesOfDependencies();

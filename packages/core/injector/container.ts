@@ -46,16 +46,6 @@ export class NestContainer {
     return this._applicationConfig;
   }
 
-  public setHttpAdapter(httpAdapter: any) {
-    this.internalProvidersStorage.httpAdapter = httpAdapter;
-
-    if (!this.internalProvidersStorage.httpAdapterHost) {
-      return;
-    }
-    const host = this.internalProvidersStorage.httpAdapterHost;
-    host.httpAdapter = httpAdapter;
-  }
-
   public getHttpAdapterRef() {
     return this.internalProvidersStorage.httpAdapter;
   }
