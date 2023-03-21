@@ -69,10 +69,6 @@ export class NestApplicationContext<
   ) {
     super();
     this.injector = new Injector();
-
-    if (this.appOptions.preview) {
-      this.printInPreviewModeWarning();
-    }
   }
 
   public selectContextModule() {
@@ -444,12 +440,5 @@ export class NestApplicationContext<
       ? modulesSortedByDistance.filter(moduleRef => moduleRef.initOnPreview)
       : modulesSortedByDistance;
     return this._moduleRefsForHooksByDistance;
-  }
-
-  private printInPreviewModeWarning() {
-    this.logger.warn('------------------------------------------------');
-    this.logger.warn('Application is running in the PREVIEW mode!');
-    this.logger.warn('Providers/controllers will not be instantiated.');
-    this.logger.warn('------------------------------------------------');
   }
 }
