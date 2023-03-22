@@ -67,6 +67,10 @@ export class InstanceLinksHost {
     });
   }
 
+  /**
+   * 节点需要额外标记来源模块：不同模块声明相同 Token
+   * 节点需要包含实例：方便直接获取或者注入
+   */
   private addLink(
     wrapper: InstanceWrapper,
     token: InstanceToken,

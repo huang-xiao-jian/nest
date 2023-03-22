@@ -193,6 +193,9 @@ export class DependenciesScanner {
       ? moduleDefinition.forwardRef()
       : moduleDefinition;
 
+    /**
+     * Module 类型安全检查
+     */
     if (
       this.isInjectable(moduleToAdd) ||
       this.isController(moduleToAdd) ||
@@ -296,6 +299,10 @@ export class DependenciesScanner {
     if (!cls || !cls.prototype) {
       return;
     }
+
+    /**
+     * 扫描装饰器级别定义的依赖，例如：`@UsePipe(ValidatePipe)`
+     */
     this.reflectInjectables(cls, token, GUARDS_METADATA);
     this.reflectInjectables(cls, token, INTERCEPTORS_METADATA);
     this.reflectInjectables(cls, token, EXCEPTION_FILTERS_METADATA);
